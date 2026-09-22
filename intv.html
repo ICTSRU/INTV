@@ -347,15 +347,34 @@
     z-index:60;
   }
 
+  .print-value{
+    display:none;
+    white-space:pre-wrap;
+    word-break:break-word;
+    font-family:'Cairo',Tahoma,Arial,sans-serif;
+    font-size:14px;
+    color:var(--ink);
+    line-height:1.7;
+    padding:2px 1px;
+  }
+  table.eval-table td .print-value{font-size:13px;line-height:1.6;}
+  .signoff .box .print-value{font-size:14px;font-weight:700;color:var(--purple-dark);}
+
   @media print{
     body{background:#fff;}
     .toolbar, .toolbar-load, .version-tag, .add-row-btn, .row-del-btn{display:none !important;}
     .page{box-shadow:none;margin:0;border:none;max-width:100%;}
-    table.eval-table td textarea, table.eval-table td input, .field input, .field select, .field textarea, .reco-list li input, .signoff input{
-      border:none;
-      background:transparent;
-      resize:none;
+
+    /* أثناء الطباعة الفعلية: إخفاء كل عناصر الإدخال واستبدالها بنص كامل غير مقصوص */
+    body.printing input, body.printing textarea, body.printing select{
+      display:none !important;
     }
+    body.printing .print-value{
+      display:block !important;
+    }
+
+    table.eval-table{page-break-inside:auto;}
+    table.eval-table tr{page-break-inside:avoid; page-break-after:auto;}
   }
   @media (max-width:640px){
     .info-grid{grid-template-columns:1fr;}
@@ -499,7 +518,7 @@
   </div>
 </div>
 
-<div class="version-tag">إصدار النموذج: v1.2</div>
+<div class="version-tag">إصدار النموذج: v1.3</div>
 
 <script>
 /* ============================================================
@@ -752,6 +771,56 @@ function populateForm(rec){
 /* تحميل القائمة تلقائيًا عند فتح الصفحة (إن كان الرابط مُعدًا) */
 if(!SHEET_URL.includes("PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE")){
   refreshRecordsList();
+}
+
+/* ---------- إصلاح قصّ النص عند الطباعة ----------
+   عناصر <input>/<textarea>/<select> لا تتمدد تلقائيًا لإظهار كامل نصها عند الطباعة،
+   لذلك نستبدلها مؤقتًا بعنصر نصي عادي يعرض القيمة كاملة قبل الطباعة مباشرة،
+   ثم نعيد العناصر الأصلية بعد انتهاء الطباعة أو إلغائها. */
+function buildPrintValues(){
+  const selector = 'input[type="text"], input[type="date"], textarea, select';
+  document.querySelectorAll(selector).forEach(el => {
+    if(el.closest('.toolbar-load') || el.closest('.toolbar')) return; // عناصر التحكم فقط، لا تُطبع أصلاً
+    if(el.id === 'loadSelect') return;
+
+    let text;
+    if(el.tagName === 'SELECT'){
+      text = el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : "";
+    } else {
+      text = el.value;
+    }
+    if(el.type === 'date' && text){
+      // عرض التاريخ بصيغة مقروءة DD/MM/YYYY
+      const parts = text.split('-');
+      if(parts.length === 3) text = `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+
+    const div = document.createElement('div');
+    div.className = 'print-value';
+    div.textContent = text && text.trim() ? text : "—";
+    el.insertAdjacentElement('afterend', div);
+  });
+  document.body.classList.add('printing');
+}
+
+function removePrintValues(){
+  document.querySelectorAll('.print-value').forEach(d => d.remove());
+  document.body.classList.remove('printing');
+}
+
+window.addEventListener('beforeprint', buildPrintValues);
+window.addEventListener('afterprint', removePrintValues);
+
+// بعض متصفحات Chromium (ومنها ميزة "حفظ كـ PDF") لا تُطلق afterprint بشكل موثوق
+// دائمًا، لذلك نضيف زر الطباعة ليبني القيم يدويًا أيضًا كطبقة أمان إضافية
+const printBtnEl = document.querySelector('.toolbar .btn-secondary[onclick="window.print()"]');
+if(printBtnEl){
+  printBtnEl.setAttribute('onclick', 'printForm()');
+}
+function printForm(){
+  buildPrintValues();
+  window.print();
+  setTimeout(removePrintValues, 800);
 }
 
 /* ---------- الحفظ في Google Sheets ---------- */
