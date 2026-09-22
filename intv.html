@@ -518,7 +518,7 @@
   </div>
 </div>
 
-<div class="version-tag">إصدار النموذج: v1.3</div>
+<div class="version-tag">إصدار النموذج: v1.4</div>
 
 <script>
 /* ============================================================
@@ -778,6 +778,10 @@ if(!SHEET_URL.includes("PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE")){
    لذلك نستبدلها مؤقتًا بعنصر نصي عادي يعرض القيمة كاملة قبل الطباعة مباشرة،
    ثم نعيد العناصر الأصلية بعد انتهاء الطباعة أو إلغائها. */
 function buildPrintValues(){
+  // إزالة أي نسخ سابقة أولاً حتى لا يتكرر النص إذا استُدعيت الدالة أكثر من مرة
+  // (مثلاً: مرة يدويًا من زر الطباعة، ومرة أخرى تلقائيًا من حدث beforeprint)
+  removePrintValues();
+
   const selector = 'input[type="text"], input[type="date"], textarea, select';
   document.querySelectorAll(selector).forEach(el => {
     if(el.closest('.toolbar-load') || el.closest('.toolbar')) return; // عناصر التحكم فقط، لا تُطبع أصلاً
@@ -811,16 +815,16 @@ function removePrintValues(){
 window.addEventListener('beforeprint', buildPrintValues);
 window.addEventListener('afterprint', removePrintValues);
 
-// بعض متصفحات Chromium (ومنها ميزة "حفظ كـ PDF") لا تُطلق afterprint بشكل موثوق
-// دائمًا، لذلك نضيف زر الطباعة ليبني القيم يدويًا أيضًا كطبقة أمان إضافية
+// زر الطباعة يستدعي window.print() مباشرة؛ حدث beforeprint هو من يبني القيم
+// (buildPrintValues أصبحت تمسح أي نسخة سابقة تلقائيًا، فلا داعي لاستدعائها يدويًا هنا)
 const printBtnEl = document.querySelector('.toolbar .btn-secondary[onclick="window.print()"]');
 if(printBtnEl){
   printBtnEl.setAttribute('onclick', 'printForm()');
 }
 function printForm(){
-  buildPrintValues();
   window.print();
-  setTimeout(removePrintValues, 800);
+  // طبقة أمان: بعض المتصفحات لا تُطلق afterprint بشكل موثوق دائمًا
+  setTimeout(removePrintValues, 1000);
 }
 
 /* ---------- الحفظ في Google Sheets ---------- */
