@@ -91,6 +91,37 @@
 
   .content{padding:24px 28px 32px;}
 
+  .toolbar-load{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    flex-wrap:wrap;
+    background:var(--blue-light);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:10px 14px;
+    margin-bottom:14px;
+  }
+  .toolbar-load label{
+    font-size:12.5px;
+    font-weight:700;
+    color:var(--purple-dark);
+    white-space:nowrap;
+  }
+  .toolbar-load select{
+    flex:1;
+    min-width:220px;
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:7px 10px;
+    font-family:'Cairo',sans-serif;
+    font-size:13.5px;
+    background:#fff;
+    color:var(--ink);
+  }
+  .btn-load{background:var(--blue);color:#fff;}
+  .btn-load:hover{background:#085a89;}
+
   .toolbar{
     position:sticky;
     top:0;
@@ -318,7 +349,7 @@
 
   @media print{
     body{background:#fff;}
-    .toolbar, .version-tag, .add-row-btn, .row-del-btn{display:none !important;}
+    .toolbar, .toolbar-load, .version-tag, .add-row-btn, .row-del-btn{display:none !important;}
     .page{box-shadow:none;margin:0;border:none;max-width:100%;}
     table.eval-table td textarea, table.eval-table td input, .field input, .field select, .field textarea, .reco-list li input, .signoff input{
       border:none;
@@ -359,6 +390,16 @@
   </div>
 
   <div class="content">
+
+    <div class="toolbar-load">
+      <label>📂 تحميل مقابلة محفوظة:</label>
+      <select id="loadSelect">
+        <option value="">-- اختر سجلًا من Google Sheets --</option>
+      </select>
+      <button type="button" class="btn btn-load" onclick="loadSelectedRecord()">تحميل للمراجعة والتعديل</button>
+      <button type="button" class="btn btn-secondary" onclick="refreshRecordsList()" title="تحديث القائمة">↻ تحديث القائمة</button>
+      <span class="status-msg" id="loadStatusMsg"></span>
+    </div>
 
     <div class="toolbar">
       <button class="btn btn-primary" id="saveBtn" onclick="saveToSheet()">💾 حفظ في Google Sheets</button>
@@ -413,8 +454,10 @@
         <label>المستوى الفني العام</label>
         <select id="overallLevel">
           <option value="ممتاز">ممتاز</option>
+          <option value="جيد جدا">جيد جدا</option>
           <option value="جيد" selected>جيد</option>
           <option value="مقبول">مقبول</option>
+          <option value="مناسب">مناسب</option>
           <option value="ضعيف">ضعيف</option>
         </select>
       </div>
@@ -456,7 +499,7 @@
   </div>
 </div>
 
-<div class="version-tag">إصدار النموذج: v1.0</div>
+<div class="version-tag">إصدار النموذج: v1.2</div>
 
 <script>
 /* ============================================================
@@ -501,9 +544,12 @@ function makeEvalRow(area=""){
     <td class="col-notes"><textarea class="notes-input" placeholder="ملاحظات المقيّم"></textarea></td>
     <td class="col-rating">
       <select class="rating-input">
+        <option value="ممتاز">ممتاز</option>
+        <option value="جيد جدا">جيد جدا</option>
         <option value="جيد">جيد</option>
         <option value="مقبول">مقبول</option>
-        <option value="فجوة">فجوة</option>
+        <option value="مناسب">مناسب</option>
+        <option value="ضعيف">ضعيف</option>
         <option value="غير مقيّم" selected>غير مقيّم</option>
       </select>
     </td>
@@ -591,12 +637,126 @@ function collectFormData(){
   };
 }
 
-/* ---------- الحفظ في Google Sheets ---------- */
-function showStatus(text, type){
-  const el = document.getElementById('statusMsg');
+/* ---------- عرض حالة عامة (يدعم أكثر من عنصر حالة على الصفحة) ---------- */
+function showStatusIn(elId, text, type){
+  const el = document.getElementById(elId);
+  if(!el) return;
   if(!text){ el.className = "status-msg"; el.textContent=""; return; }
   el.className = "status-msg show status-" + type;
   el.textContent = text;
+}
+
+/* ---------- تحميل قائمة السجلات المحفوظة من Google Sheets ---------- */
+function refreshRecordsList(){
+  const sel = document.getElementById('loadSelect');
+  if(SHEET_URL.includes("PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE")){
+    showStatusIn('loadStatusMsg', "✖ لم يتم إعداد رابط Google Sheets بعد", "err");
+    return;
+  }
+  showStatusIn('loadStatusMsg', "جارٍ تحميل القائمة...", "wait");
+  fetch(SHEET_URL + "?action=list")
+    .then(r => r.json())
+    .then(res => {
+      sel.innerHTML = '<option value="">-- اختر سجلًا من Google Sheets --</option>';
+      if(res && res.result === "success" && Array.isArray(res.records)){
+        res.records.forEach(rec => {
+          const opt = document.createElement('option');
+          opt.value = rec.formId;
+          const dateStr = rec.interviewDate || "بدون تاريخ";
+          const nameStr = rec.candidateName || "بدون اسم";
+          const posStr = rec.position || "";
+          opt.textContent = `${dateStr} — ${nameStr}${posStr ? " — " + posStr : ""} (${rec.formId})`;
+          sel.appendChild(opt);
+        });
+        showStatusIn('loadStatusMsg', `✔ تم تحميل ${res.records.length} سجل`, "ok");
+      } else {
+        showStatusIn('loadStatusMsg', "✖ تعذّر تحميل القائمة", "err");
+      }
+    })
+    .catch(err => {
+      showStatusIn('loadStatusMsg', "✖ تعذّر الاتصال بـ Google Sheets", "err");
+      console.error(err);
+    });
+}
+
+/* ---------- تحميل تفاصيل سجل محدد إلى الفورم للمراجعة والتعديل ---------- */
+function loadSelectedRecord(){
+  const sel = document.getElementById('loadSelect');
+  const formId = sel.value;
+  if(!formId){
+    alert("يرجى اختيار سجل من القائمة أولاً.");
+    return;
+  }
+  if(!confirm("سيتم استبدال محتوى الفورم الحالي ببيانات السجل المحدد. هل تريد المتابعة؟")) return;
+
+  showStatusIn('loadStatusMsg', "جارٍ تحميل السجل...", "wait");
+  fetch(SHEET_URL + "?action=get&formId=" + encodeURIComponent(formId))
+    .then(r => r.json())
+    .then(res => {
+      if(!(res && res.result === "success" && res.record)){
+        showStatusIn('loadStatusMsg', "✖ تعذّر تحميل السجل: " + (res && res.message ? res.message : ""), "err");
+        return;
+      }
+      populateForm(res.record);
+      showStatusIn('loadStatusMsg', "✔ تم تحميل السجل " + formId + " للمراجعة والتعديل", "ok");
+    })
+    .catch(err => {
+      showStatusIn('loadStatusMsg', "✖ تعذّر الاتصال بـ Google Sheets", "err");
+      console.error(err);
+    });
+}
+
+function populateForm(rec){
+  currentFormId = rec.formId || generateFormId();
+  document.getElementById('formId').textContent = currentFormId;
+
+  document.getElementById('candidateName').value = rec.candidateName || "";
+  document.getElementById('interviewDate').value = rec.interviewDate || "";
+  document.getElementById('position').value = rec.position || "";
+  document.getElementById('interviewer').value = rec.interviewer || "";
+  document.getElementById('overallLevel').value = rec.overallLevel || "جيد";
+  document.getElementById('overallSummary').value = rec.overallSummary || "";
+  document.getElementById('recoIntro').value = rec.recommendationIntro || "";
+  document.getElementById('sign1Name').value = rec.sign1Name || "";
+  document.getElementById('sign1Date').value = rec.sign1Date || "";
+  document.getElementById('sign2Name').value = rec.sign2Name || "د. ناصر أبو نار";
+  document.getElementById('sign2Date').value = rec.sign2Date || "";
+
+  // إعادة بناء جدول التقييم الفني
+  evalTbody.innerHTML = "";
+  const rows = Array.isArray(rec.evaluationRows) ? rec.evaluationRows : [];
+  if(rows.length === 0){
+    loadDefaultRows();
+  } else {
+    rows.forEach(r => {
+      const tr = makeEvalRow(r.area || "");
+      tr.querySelector('.points-input').value = r.points || "";
+      tr.querySelector('.notes-input').value = r.notes || "";
+      if(r.rating) tr.querySelector('.rating-input').value = r.rating;
+      evalTbody.appendChild(tr);
+    });
+  }
+
+  // إعادة بناء نقاط التوصية
+  recoList.innerHTML = "";
+  const points = Array.isArray(rec.recommendationPoints) ? rec.recommendationPoints : [];
+  if(points.length === 0){
+    addRecoItem("");
+  } else {
+    points.forEach(p => addRecoItem(p));
+  }
+
+  showStatus("", "");
+}
+
+/* تحميل القائمة تلقائيًا عند فتح الصفحة (إن كان الرابط مُعدًا) */
+if(!SHEET_URL.includes("PASTE_YOUR_APPS_SCRIPT_WEB_APP_URL_HERE")){
+  refreshRecordsList();
+}
+
+/* ---------- الحفظ في Google Sheets ---------- */
+function showStatus(text, type){
+  showStatusIn('statusMsg', text, type);
 }
 
 function saveToSheet(){
