@@ -264,6 +264,24 @@
     font-size:12.5px;
     background:#fff;
   }
+  /* شكل الحبة (Pill) الملوّن لقائمة التقييم — الألوان الفعلية تُطبَّق عبر JS حسب القيمة المختارة */
+  select.rating-input, #overallLevel{
+    appearance:auto;
+    -webkit-appearance:auto;
+    border-radius:14px !important;
+    border:1px solid transparent !important;
+    font-weight:700 !important;
+    text-align:center;
+    text-align-last:center;
+    padding:6px 10px !important;
+    cursor:pointer;
+    transition:background-color .15s, color .15s;
+  }
+  #overallLevel{
+    width:auto;
+    display:inline-block;
+    font-size:14px !important;
+  }
   .col-area{width:18%;}
   .col-points{width:32%;}
   .col-notes{width:32%;}
@@ -359,8 +377,21 @@
   }
   table.eval-table td .print-value{font-size:13px;line-height:1.6;}
   .signoff .box .print-value{font-size:14px;font-weight:700;color:var(--purple-dark);}
+  .print-value-pill{
+    display:inline-block !important;
+    border-radius:14px;
+    padding:3px 12px;
+    font-size:12px !important;
+    font-weight:700;
+    text-align:center;
+    white-space:nowrap;
+  }
+  body.printing table.eval-table td.col-rating .print-value{
+    text-align:center;
+  }
 
   @media print{
+    *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; }
     body{background:#fff;}
     .toolbar, .toolbar-load, .version-tag, .add-row-btn, .row-del-btn{display:none !important;}
     .page{box-shadow:none;margin:0;border:none;max-width:100%;}
@@ -518,7 +549,7 @@
   </div>
 </div>
 
-<div class="version-tag">إصدار النموذج: v1.4</div>
+<div class="version-tag">إصدار النموذج: v1.5</div>
 
 <script>
 /* ============================================================
@@ -574,7 +605,28 @@ function makeEvalRow(area=""){
     </td>
     <td class="col-del"><button type="button" class="row-del-btn" onclick="this.closest('tr').remove()" title="حذف الصف">✕</button></td>
   `;
+  const ratingSel = tr.querySelector('.rating-input');
+  applyRatingColor(ratingSel);
+  ratingSel.addEventListener('change', () => applyRatingColor(ratingSel));
   return tr;
+}
+
+/* ---------- تلوين قائمة التقييم كحبة (Pill) حسب القيمة المختارة ---------- */
+const RATING_COLORS = {
+  "ممتاز":      { bg: "#1e8c4a", color: "#ffffff" },
+  "جيد جدا":    { bg: "#e6f6ec", color: "#1e8c4a" },
+  "جيد":        { bg: "#e6f6ec", color: "#1e8c4a" },
+  "مقبول":      { bg: "#0a6eaa", color: "#ffffff" },
+  "مناسب":      { bg: "#e6f3fa", color: "#0a6eaa" },
+  "ضعيف":       { bg: "#fbe9e7", color: "#c0392b" },
+  "فجوة":       { bg: "#fbe9e7", color: "#c0392b" },
+  "غير مقيّم":  { bg: "#eeeeee", color: "#6b5a80" }
+};
+
+function applyRatingColor(select){
+  const c = RATING_COLORS[select.value] || RATING_COLORS["غير مقيّم"];
+  select.style.backgroundColor = c.bg;
+  select.style.color = c.color;
 }
 
 function addEvalRow(area=""){
@@ -604,6 +656,11 @@ function addRecoItem(text=""){
 }
 ["تركيب وتشغيل وصيانة المعدات ذات الصلة.", "تقديم الدعم الفني للمستخدمين."].forEach(t => addRecoItem(t));
 
+/* تلوين قائمة "المستوى الفني العام" كحبة (Pill) أيضًا لتناسق الشكل */
+const overallLevelEl = document.getElementById('overallLevel');
+applyRatingColor(overallLevelEl);
+overallLevelEl.addEventListener('change', () => applyRatingColor(overallLevelEl));
+
 /* ---------- تفريغ النموذج لمقابلة جديدة ---------- */
 function newInterview(){
   if(!confirm("سيتم تفريغ جميع الحقول لبدء مقابلة جديدة. هل تريد المتابعة؟")) return;
@@ -612,6 +669,7 @@ function newInterview(){
   document.getElementById('position').value = "";
   document.getElementById('interviewer').value = "";
   document.getElementById('overallLevel').value = "جيد";
+  applyRatingColor(document.getElementById('overallLevel'));
   document.getElementById('overallSummary').value = "";
   document.getElementById('recoIntro').value = "";
   document.getElementById('sign1Name').value = "";
@@ -734,6 +792,7 @@ function populateForm(rec){
   document.getElementById('position').value = rec.position || "";
   document.getElementById('interviewer').value = rec.interviewer || "";
   document.getElementById('overallLevel').value = rec.overallLevel || "جيد";
+  applyRatingColor(document.getElementById('overallLevel'));
   document.getElementById('overallSummary').value = rec.overallSummary || "";
   document.getElementById('recoIntro').value = rec.recommendationIntro || "";
   document.getElementById('sign1Name').value = rec.sign1Name || "";
@@ -751,7 +810,9 @@ function populateForm(rec){
       const tr = makeEvalRow(r.area || "");
       tr.querySelector('.points-input').value = r.points || "";
       tr.querySelector('.notes-input').value = r.notes || "";
-      if(r.rating) tr.querySelector('.rating-input').value = r.rating;
+      const ratingSel = tr.querySelector('.rating-input');
+      if(r.rating) ratingSel.value = r.rating;
+      applyRatingColor(ratingSel);
       evalTbody.appendChild(tr);
     });
   }
@@ -802,6 +863,15 @@ function buildPrintValues(){
     const div = document.createElement('div');
     div.className = 'print-value';
     div.textContent = text && text.trim() ? text : "—";
+
+    // الحفاظ على شكل الحبة الملوّنة عند الطباعة لقوائم التقييم
+    if(el.classList.contains('rating-input') || el.id === 'overallLevel'){
+      const c2 = RATING_COLORS[el.value] || RATING_COLORS["غير مقيّم"];
+      div.classList.add('print-value-pill');
+      div.style.backgroundColor = c2.bg;
+      div.style.color = c2.color;
+    }
+
     el.insertAdjacentElement('afterend', div);
   });
   document.body.classList.add('printing');
